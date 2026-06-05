@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自动出图纸系统 - 博众新能源</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="style.css">
+    <!-- 引入字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 引入 html2pdf.js 用于导出 PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- 引入 D3.js 用于强大的数据驱动和 SVG 生成 -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 左侧控制面板 -->
+        <aside class="control-panel">
+            <div class="panel-header">
+                <h1>自动出图系统</h1>
+                <p>统一生成 PDF 图纸、STL 和 STEP</p>
+            </div>
+
+            <div class="form-scroll">
+            <div class="input-group">
+                <label>长 (L) mm</label>
+                <input type="number" id="input-l" value="16.00" step="0.1">
+            </div>
+
+            <div class="input-group">
+                <label>宽 (W) mm</label>
+                <input type="number" id="input-w" value="3.00" step="0.1">
+            </div>
+
+            <div class="input-group">
+                <label>厚 (T) mm</label>
+                <input type="number" id="input-t" value="2.00" step="0.1">
+            </div>
+
+            <div class="input-group">
+                <label>倒角 (C) mm</label>
+                <input type="number" id="input-c" value="0.20" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>3D 视角</label>
+                <select id="input-angle">
+                    <option value="e_rotate_x180" selected>E_rotateX180（默认）</option>
+                    <option value="b_rotate_x180">B_rotateX180</option>
+                    <option value="e_bottom_fillet_alt">E_bottomFillet_alt</option>
+                    <option value="b_bottom_fillet_alt">B_bottomFillet_alt</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>材料</label>
+                <select id="input-mat">
+                    <option value="紫铜" selected>紫铜</option>
+                    <option value="黄铜">黄铜</option>
+                    <option value="锰钢">锰钢</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>电镀/表面处理</label>
+                <select id="input-plat">
+                    <option value="镀雾锡" selected>镀雾锡</option>
+                    <option value="镀镍">镀镍</option>
+                    <option value="亮锡">亮锡</option>
+                    <option value="镀金">镀金</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>包装方式</label>
+                <select id="input-pack">
+                    <option value="袋装" selected>袋装</option>
+                    <option value="编带">编带</option>
+                </select>
+            </div>
+            
+            <div class="input-group">
+                <label class="inline-check">
+                    <span>料号 (PART NO)</span>
+                    <input type="checkbox" id="input-partno-auto" checked>
+                    <span>自动</span>
+                </label>
+                <input type="text" id="input-partno" value="BTC-1632-ZMT01">
+            </div>
+            <input type="hidden" id="input-design" value="XIAO">
+            </div>
+
+            <div class="actions">
+                <button id="btn-update" class="btn-secondary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.5l5.8 5.8"/></svg>
+                    更新预览
+                </button>
+                <button id="btn-export" class="btn-primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                    生成 PDF 图纸
+                </button>
+                <div class="button-row">
+                    <button id="btn-export-stl" class="btn-secondary">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                        输出 STL
+                    </button>
+                    <button id="btn-export-step" class="btn-secondary">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>
+                        输出 STEP
+                    </button>
+                </div>
+                <p id="export-status" class="export-status">默认保存到百度网盘/博众/立创图纸更新/铜条新图纸。</p>
+            </div>
+        </aside>
+
+        <!-- 右侧预览面板 -->
+        <main class="preview-panel">
+            <div class="preview-header">
+                <h2>图纸预览</h2>
+                <div class="zoom-controls">
+                    <button id="btn-zoom-out">-</button>
+                    <span id="zoom-level">100%</span>
+                    <button id="btn-zoom-in">+</button>
+                </div>
+            </div>
+            
+            <div class="canvas-wrapper">
+                <!-- 图纸容器，用于导出 -->
+                <div id="drawing-container" class="drawing-paper">
+                    <!-- SVG将在JS中动态生成 -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js?v=21"></script>
+</body>
+</html>

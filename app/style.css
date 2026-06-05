@@ -1,0 +1,352 @@
+:root {
+    --bg-dark: #0f1115;
+    --bg-panel: #1a1d24;
+    --text-primary: #f0f2f5;
+    --text-secondary: #a0a5b1;
+    --accent-color: #f97316; /* 品牌橙色，匹配dgbzxny logo */
+    --accent-hover: #ea580c;
+    --border-color: rgba(255, 255, 255, 0.1);
+    --input-bg: #252932;
+    --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+    --glass-bg: rgba(26, 29, 36, 0.7);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+}
+
+.app-container {
+    display: flex;
+    height: 100%;
+}
+
+/* 控制面板 */
+.control-panel {
+    width: 340px;
+    flex: 0 0 340px;
+    background-color: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    border-right: 1px solid var(--border-color);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 10;
+}
+
+.panel-header {
+    padding: 2rem 2rem 1rem;
+    flex: 0 0 auto;
+}
+
+.panel-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #fff, #a0a5b1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.panel-header p {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.form-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 2rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.input-group label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.input-group .inline-check {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.input-group .inline-check input {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    accent-color: var(--accent-color);
+}
+
+.input-group input,
+.input-group select {
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-family: 'Inter', sans-serif;
+    transition: all 0.2s ease;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.2);
+}
+
+.input-group input.input-readonly {
+    color: var(--text-secondary);
+}
+
+.actions {
+    flex: 0 0 auto;
+    padding: 1rem 2rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    background: rgba(26, 29, 36, 0.97);
+    border-top: 1px solid var(--border-color);
+}
+
+.button-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+}
+
+.button-row button {
+    min-width: 0;
+}
+
+button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+button svg {
+    width: 18px;
+    height: 18px;
+}
+
+.btn-primary {
+    background-color: var(--accent-color);
+    color: white;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+}
+
+.btn-primary:hover {
+    background-color: var(--accent-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(249, 115, 22, 0.4);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    background-color: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+    transform: none;
+}
+
+.export-status {
+    min-height: 2.4rem;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.export-status.is-success {
+    color: #86efac;
+}
+
+.export-status.is-error {
+    color: #fca5a5;
+}
+
+/* 预览面板 */
+.preview-panel {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background: radial-gradient(circle at center, #1f222b 0%, #0f1115 100%);
+}
+
+.preview-header {
+    position: absolute;
+    top: 1.5rem;
+    left: 2rem;
+    right: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+}
+
+.preview-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    background-color: var(--glass-bg);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 0.25rem;
+}
+
+.zoom-controls button {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    width: 32px;
+    height: 32px;
+    border-radius: 16px;
+    font-size: 1.2rem;
+    padding: 0;
+}
+
+.zoom-controls button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.zoom-controls span {
+    padding: 0 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.canvas-wrapper {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+    padding: 5rem 2rem 2rem 2rem; /* 增加 top padding 避免被 header 遮挡 */
+}
+
+/* 图纸样式 - 需要白底和标准比例 */
+.drawing-paper {
+    background-color: white;
+    box-shadow: var(--shadow-lg);
+    /* 1.414 比例，A4横向标准 */
+    width: 1122px; 
+    height: 793px;
+    position: relative;
+    transform-origin: center center;
+    transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* 内部SVG样式 */
+.drawing-paper svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.svg-line {
+    stroke: black;
+    stroke-width: 1;
+    fill: none;
+}
+
+.svg-line-thick {
+    stroke: black;
+    stroke-width: 2.5;
+    fill: none;
+}
+
+.svg-line-dim {
+    stroke: black;
+    stroke-width: 0.5;
+    fill: none;
+}
+
+.svg-text {
+    fill: black;
+    font-family: 'Arial', sans-serif;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--input-bg);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--border-color);
+}
+
+/* 隐藏 number 输入框的上下调节按钮，强制手动输入 */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type="number"] {
+    -moz-appearance: textfield;
+}
