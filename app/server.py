@@ -1,6 +1,12 @@
 import base64
+import contextlib
+import importlib.util
+import io
 import json
 import re
+import tempfile
+import threading
+import warnings
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -14,6 +20,7 @@ from iso_cad import DEFAULT_ANGLE_ID, generate_iso_svg
 
 APP_DIR = Path(__file__).resolve().parent
 ROOT_DIR = APP_DIR.parent
+NUT_REFERENCE_FILE = ROOT_DIR / "自动画图-圆柱.py"
 OUTPUT_DIR = Path("/Users/futejia/百度网盘/博众/立创图纸更新/铜条新图纸")
 EXPORT_DIRS = {
     "pdf": OUTPUT_DIR / "pdf",
@@ -21,6 +28,8 @@ EXPORT_DIRS = {
     "step": OUTPUT_DIR / "step",
 }
 FILENAME_SAFE_RE = re.compile(r"[^0-9A-Za-z._()\\-\\[\\]\u4e00-\u9fff]+")
+_NUT_REFERENCE_LOCK = threading.Lock()
+_NUT_REFERENCE_MODULE = None
 
 
 def ensure_output_dirs():
@@ -50,11 +59,83 @@ def rounded_bar(length, width, thickness, radius):
     return part
 
 
+def _load_nut_reference_module():
+    global _NUT_REFERENCE_MODULE
+    if _NUT_REFERENCE_MODULE is not None:
+        return _NUT_REFERENCE_MODULE
+    if not NUT_REFERENCE_FILE.exists():
+        raise FileNotFoundError(f"reference drawing script not found: {NUT_REFERENCE_FILE}")
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    spec = importlib.util.spec_from_file_location("nut_reference_drawing", NUT_REFERENCE_FILE)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load reference drawing script")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _NUT_REFERENCE_MODULE = module
+    return module
+
+
+def _float_param(params, name, fallback):
+    try:
+        return float(params.get(name, [fallback])[0])
+    except (TypeError, ValueError):
+        return float(fallback)
+
+
+def generate_reference_nut_svg(query):
+    params = parse_qs(query)
+    reference_params = {
+        "outer_diameter": max(_float_param(params, "outerD", 5.56), 0.1),
+        "inner_diameter": max(_float_param(params, "innerD", 2.05), 0.1),
+        "three_quarter_diameter": max(_float_param(params, "thread", 2.5), 0.1),
+        "main_length": max(_float_param(params, "mainLength", 7), 0.1),
+        "step_length": max(_float_param(params, "stepLength", 1.53), 0.1),
+        "step_diameter": max(_float_param(params, "stepD", 4.09), 0.1),
+        "main_chamfer_size": max(_float_param(params, "mainC", 0.2), 0),
+        "step_chamfer_size": max(_float_param(params, "stepC", 0.4), 0),
+    }
+
+    with _NUT_REFERENCE_LOCK:
+        module = _load_nut_reference_module()
+        module.PARAMS.update(reference_params)
+        module.PARAMS.update(
+            {
+                "figsize_combined": (12, 6),
+                "margin": 3.0,
+                "dimension_font_size": 8,
+                "dimension_line_width": 0.5,
+                "dimension_text_offset": 0.3,
+                "wspace": 0.5,
+                "dimension_offset": 2.0,
+            }
+        )
+        custom_params = module.PARAMS.copy()
+        with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as temp_file:
+            temp_path = Path(temp_file.name)
+        original_show = module.plt.show
+        try:
+            module.plt.show = lambda *args, **kwargs: None
+            with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                module.create_combined_views(custom_params, str(temp_path))
+            return temp_path.read_bytes()
+        finally:
+            module.plt.show = original_show
+            module.plt.close("all")
+            temp_path.unlink(missing_ok=True)
+
+
 class DrawingRequestHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/iso-svg":
             self._send_iso_svg(parsed.query)
+            return
+        if parsed.path == "/api/nut-reference-svg":
+            self._send_nut_reference_svg(parsed.query)
             return
         if parsed.path == "/api/export-model":
             self._send_model_export(parsed.query)
@@ -90,6 +171,18 @@ class DrawingRequestHandler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+    def _send_nut_reference_svg(self, query):
+        try:
+            body = generate_reference_nut_svg(query)
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            self._send_error_text(500, str(exc))
 
     def _send_model_export(self, query):
         try:

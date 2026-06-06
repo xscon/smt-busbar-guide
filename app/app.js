@@ -22,6 +22,23 @@ document.addEventListener('DOMContentLoaded', () => {
         { keywords: ['编带', 'T&R', 'T＆R', '02'], code: '02', en: 'T&R' },
         { keywords: ['袋装', '散装', '01'], code: '01', en: 'Bag' }
     ];
+    const THREAD_PITCHES = {
+        1: '0.25',
+        1.2: '0.25',
+        1.4: '0.3',
+        1.6: '0.35',
+        2: '0.4',
+        2.5: '0.45',
+        3: '0.5',
+        3.5: '0.6',
+        4: '0.7'
+    };
+    const productPartNumbers = {
+        busbar: document.getElementById('input-partno').value,
+        nut: ''
+    };
+    let activeProductType = 'busbar';
+    let busbarPartNumberAuto = true;
 
     document.getElementById('btn-zoom-in').addEventListener('click', () => {
         if (currentZoom < 3) {
@@ -54,6 +71,81 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateZoom() {
         drawingPaper.style.transform = `scale(${currentZoom})`;
         zoomLevelText.textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+
+    function getProductType() {
+        return document.getElementById('input-product-type')?.value || 'busbar';
+    }
+
+    function isNutMode() {
+        return getProductType() === 'nut';
+    }
+
+    function readNumber(id, fallback, minValue = 0.001) {
+        const value = parseFloat(document.getElementById(id)?.value);
+        if (!Number.isFinite(value)) return fallback;
+        return Math.max(value, minValue);
+    }
+
+    function formatMetric(value, digits = 2) {
+        return Number(value).toFixed(digits).replace(/\.?0+$/, '');
+    }
+
+    function getThreadLabel(threadSize) {
+        return `M${formatMetric(threadSize)}`;
+    }
+
+    function getThreadPitch(threadSize) {
+        return THREAD_PITCHES[formatMetric(threadSize)] || '0.5';
+    }
+
+    function updateProductUi() {
+        const productType = getProductType();
+        document.querySelectorAll('[data-product-panel]').forEach(panel => {
+            const isInactive = panel.dataset.productPanel !== productType;
+            panel.classList.toggle('is-hidden', isInactive);
+            panel.hidden = isInactive;
+            panel.setAttribute('aria-hidden', String(isInactive));
+            panel.querySelectorAll('input, select, textarea, button').forEach(control => {
+                control.disabled = isInactive;
+            });
+        });
+
+        const autoCheckbox = document.getElementById('input-partno-auto');
+        const stlButton = document.getElementById('btn-export-stl');
+        const stepButton = document.getElementById('btn-export-step');
+        if (autoCheckbox) {
+            if (productType === 'nut') {
+                autoCheckbox.checked = false;
+                autoCheckbox.disabled = true;
+            } else {
+                autoCheckbox.disabled = false;
+                autoCheckbox.checked = busbarPartNumberAuto;
+            }
+        }
+        if (stlButton && stepButton) {
+            const modelDisabled = productType === 'nut';
+            stlButton.disabled = modelDisabled;
+            stepButton.disabled = modelDisabled;
+            stlButton.title = modelDisabled ? '贴片螺母 3D/STL 后续增加' : '';
+            stepButton.title = modelDisabled ? '贴片螺母 3D/STEP 后续增加' : '';
+        }
+    }
+
+    function switchProductType() {
+        const partNoInput = document.getElementById('input-partno');
+        productPartNumbers[activeProductType] = partNoInput.value;
+        activeProductType = getProductType();
+        partNoInput.value = productPartNumbers[activeProductType] || '';
+        partNoInput.placeholder = activeProductType === 'nut' ? '手动输入BTN料号' : '';
+        updateProductUi();
+        syncPartNumberField();
+        if (activeProductType === 'nut') {
+            setExportStatus('贴片螺母首版只生成 PDF 图纸，3D/STL/STEP 后续增加。');
+        } else {
+            setExportStatus('默认保存到百度网盘/博众/立创图纸更新/铜条新图纸。');
+        }
+        document.querySelector('.form-scroll')?.scrollTo({ top: 0, behavior: 'auto' });
     }
 
     function getSelectedIsoAngle() {
@@ -151,6 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function isPartNumberAuto() {
+        if (isNutMode()) return false;
         return document.getElementById('input-partno-auto')?.checked !== false;
     }
 
@@ -161,6 +254,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function syncPartNumberField() {
+        updateProductUi();
+        if (isNutMode()) {
+            const partNoInput = document.getElementById('input-partno');
+            partNoInput.readOnly = false;
+            partNoInput.classList.remove('input-readonly');
+            productPartNumbers.nut = partNoInput.value;
+            return partNoInput.value.trim();
+        }
+
         const L = parseFloat(document.getElementById('input-l').value) || 16;
         const W = parseFloat(document.getElementById('input-w').value) || 3;
         const T = parseFloat(document.getElementById('input-t').value) || 2;
@@ -172,10 +274,18 @@ document.addEventListener('DOMContentLoaded', () => {
             partNoInput.value = buildPartNumber(L, W, T, mat, plat, pack);
         }
         updatePartNumberInputState();
+        productPartNumbers.busbar = partNoInput.value;
         return partNoInput.value.trim();
     }
 
     function getExportValues() {
+        if (isNutMode()) {
+            return {
+                productType: 'nut',
+                partNo: syncPartNumberField() || buildNutFilenameStem()
+            };
+        }
+
         const L = parseFloat(document.getElementById('input-l').value) || 16;
         const W = parseFloat(document.getElementById('input-w').value) || 3;
         const T = parseFloat(document.getElementById('input-t').value) || 2;
@@ -184,11 +294,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const plat = document.getElementById('input-plat').value || '镀雾锡';
         const pack = document.getElementById('input-pack').value || '袋装';
         const partNo = syncPartNumberField() || buildPartNumber(L, W, T, mat, plat, pack);
-        return { L, W, T, C, mat, plat, pack, partNo };
+        return { productType: 'busbar', L, W, T, C, mat, plat, pack, partNo };
     }
 
     // 绘制图纸
     async function draw() {
+        updateProductUi();
+        if (isNutMode()) {
+            return drawNutDrawing();
+        }
+        return drawBusbarDrawing();
+    }
+
+    async function drawBusbarDrawing() {
         // 获取输入值
         const L = parseFloat(document.getElementById('input-l').value) || 16;
         const W = parseFloat(document.getElementById('input-w').value) || 3;
@@ -350,6 +468,421 @@ document.addEventListener('DOMContentLoaded', () => {
         </svg>`;
 
         drawingPaper.innerHTML = svg;
+    }
+
+    function getNutValues() {
+        const threadSize = readNumber('input-nut-thread', 2.5, 0.1);
+        const outerD = readNumber('input-nut-outer-d', 5.56);
+        const innerD = Math.min(readNumber('input-nut-inner-d', 2.05), outerD - 0.1);
+        const mainLength = readNumber('input-nut-main-length', 7);
+        const stepLength = readNumber('input-nut-step-length', 1.53);
+        const stepD = Math.min(readNumber('input-nut-step-d', 4.09), outerD);
+        const mainC = Math.min(readNumber('input-nut-main-c', 0.2), outerD / 2 - 0.001);
+        const stepC = Math.min(readNumber('input-nut-step-c', 0.4), stepD / 2 - 0.001);
+        return {
+            threadSize,
+            threadLabel: getThreadLabel(threadSize),
+            threadPitch: getThreadPitch(threadSize),
+            threadD: Math.min(threadSize, outerD - 0.1),
+            outerD,
+            innerD,
+            mainLength,
+            stepLength,
+            stepD,
+            mainC,
+            stepC,
+            totalLength: mainLength + stepLength
+        };
+    }
+
+    function buildNutFilenameStem() {
+        const nut = getNutValues();
+        return `${nut.threadLabel}-Nut-${formatMetric(nut.outerD)}x${formatMetric(nut.totalLength)}`;
+    }
+
+    function textToBase64(text) {
+        const bytes = new TextEncoder().encode(text);
+        let binary = '';
+        bytes.forEach(byte => {
+            binary += String.fromCharCode(byte);
+        });
+        return btoa(binary);
+    }
+
+    async function getNutReferenceSvgDataUri(nut) {
+        const params = new URLSearchParams({
+            thread: formatMetric(nut.threadSize),
+            outerD: formatMetric(nut.outerD),
+            innerD: formatMetric(nut.innerD),
+            mainLength: formatMetric(nut.mainLength),
+            stepLength: formatMetric(nut.stepLength),
+            stepD: formatMetric(nut.stepD),
+            mainC: formatMetric(nut.mainC),
+            stepC: formatMetric(nut.stepC)
+        });
+        const response = await fetch(`/api/nut-reference-svg?${params.toString()}`, { cache: 'no-store' });
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+        const referenceSvg = await response.text();
+        return `data:image/svg+xml;base64,${textToBase64(referenceSvg)}`;
+    }
+
+    async function drawNutDrawing() {
+        const nut = getNutValues();
+        const mat = document.getElementById('input-mat').value || '黄铜';
+        const plat = document.getElementById('input-plat').value || '亮锡';
+        const pack = document.getElementById('input-pack').value || '袋装';
+        const partNo = syncPartNumberField();
+        const design = document.getElementById('input-design').value || 'XIAO';
+        const materialEn = resolveEnglish(mat, MATERIAL_CODES, mat);
+        const platingEn = resolveEnglish(plat, PLATING_CODES, plat);
+        const packEn = buildPackingEnglish(mat, plat, pack, partNo);
+        const date = DEFAULT_DRAWING_DATE;
+        const vbW = 2970;
+        const vbH = 2100;
+        const margin = 100;
+        const scale = Math.min(580 / nut.totalLength, 360 / nut.outerD, 118);
+        const itemName = `${nut.threadLabel} Φ${formatMetric(nut.outerD)}*${formatMetric(nut.totalLength)} ${mat}${plat} 贴片螺母`;
+        let nutReferenceView;
+        try {
+            const referenceSvgDataUri = await getNutReferenceSvgDataUri(nut);
+            nutReferenceView = `<image id="nut-reference-view" href="${referenceSvgDataUri}" x="20" y="125" width="2460" height="1110" preserveAspectRatio="xMinYMid meet" pointer-events="none" />`;
+        } catch (error) {
+            console.warn('Reference nut drawing generation failed.', error);
+            nutReferenceView = `<text x="960" y="760" class="note-text" text-anchor="middle">参考螺母平面图生成失败</text>`;
+        }
+
+        const svg = `<svg viewBox="0 0 ${vbW} ${vbH}" xmlns="http://www.w3.org/2000/svg">
+            <style>
+                .t-bold { font-weight: bold; font-family: Arial, sans-serif; }
+                .t-norm { font-family: Arial, sans-serif; }
+                .line-thick { stroke: #000; stroke-width: 4; fill: none; stroke-linejoin: round; }
+                .line-norm { stroke: #000; stroke-width: 2; fill: none; }
+                .line-dim { stroke: #000; stroke-width: 1.5; fill: none; }
+                .dim-text { font-size: 32px; font-family: Arial, sans-serif; text-anchor: middle; }
+                .note-text { font-size: 24px; font-family: Arial, sans-serif; }
+                .title-text { font-size: 40px; font-family: Arial, sans-serif; font-weight: bold; }
+                .grid-text { font-size: 48px; font-family: Arial, sans-serif; text-anchor: middle; dominant-baseline: central; fill: #555; }
+                .bg-white { fill: #fff; }
+                .bg-black { fill: #000; }
+                .nut-outline { stroke: #000; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+                .nut-inner { stroke: #000; stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+                .nut-dim { stroke: #000; stroke-width: 1.45; fill: none; stroke-linecap: square; stroke-linejoin: round; }
+                .nut-center { stroke: #000; stroke-width: 1.25; fill: none; stroke-dasharray: 30,12,6,12; stroke-linecap: butt; }
+                .nut-hatch { stroke: #000; stroke-width: 1.3; fill: none; stroke-linecap: butt; }
+                .nut-thread { stroke: #000; stroke-width: 1.45; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+                .nut-text { font-size: 32px; font-family: Arial, sans-serif; fill: #000; text-anchor: middle; dominant-baseline: middle; }
+                .nut-note { font-size: 31px; font-family: Arial, sans-serif; fill: #000; }
+                .usage-outline { stroke: #000; stroke-width: 3; fill: none; stroke-linecap: square; stroke-linejoin: round; }
+                .usage-thin { stroke: #000; stroke-width: 1.5; fill: none; stroke-linecap: square; stroke-linejoin: round; }
+                .usage-center { stroke: #000; stroke-width: 1.2; fill: none; stroke-dasharray: 18,10; stroke-linecap: butt; }
+                .usage-hatch { stroke: #000; stroke-width: 1.4; fill: none; stroke-linecap: butt; }
+                .usage-text { font-size: 24px; font-family: Arial, sans-serif; fill: #000; }
+            </style>
+
+            <rect x="${margin}" y="${margin}" width="${vbW - 2*margin}" height="${vbH - 2*margin}" class="line-thick" />
+            ${generateGrid(vbW, vbH, margin)}
+
+            ${nutReferenceView}
+            ${drawNutUsageSchematic()}
+
+            <g id="notes" transform="translate(2050, 1250)">
+                <text x="0" y="0" class="note-text" style="font-size: 28px;">1.材质:${mat}, 螺纹:${nut.threadLabel}×${nut.threadPitch};</text>
+                <text x="25" y="35" class="note-text">Material: ${materialEn}, Thread: ${nut.threadLabel}×${nut.threadPitch}</text>
+
+                <text x="0" y="80" class="note-text" style="font-size: 28px;">2.表面处理:${plat}; 盐雾;24H</text>
+                <text x="25" y="115" class="note-text">Surface treatment: ${platingEn}, Salt spray level 24H</text>
+
+                <text x="0" y="160" class="note-text" style="font-size: 28px;">3.未注公差:±0.1mm;</text>
+                <text x="25" y="195" class="note-text">Unspecified tolerance: ±0.1mm;</text>
+
+                <text x="0" y="240" class="note-text" style="font-size: 28px;">4.符合RoHS、REACH环保要求;</text>
+                <text x="25" y="275" class="note-text">RoHS、REACH Compliance</text>
+
+                <text x="0" y="320" class="note-text" style="font-size: 28px;">5.包装方式:${pack}</text>
+                <text x="25" y="355" class="note-text">Packing: ${packEn}</text>
+            </g>
+
+            ${drawTitleBlock(margin, vbW, vbH, nut.totalLength, nut.outerD, nut.stepD, mat, plat, partNo, design, date, scale, itemName, '')}
+            ${drawRevisionBlock(vbW, margin)}
+        </svg>`;
+
+        drawingPaper.innerHTML = svg;
+    }
+
+    function drawUsageHatches(x, y, width, height, spacing = 18) {
+        const lines = [];
+        for (let start = x - height; start < x + width; start += spacing) {
+            const x1 = Math.max(x, start);
+            const y1 = y + Math.max(0, x - start);
+            const x2 = Math.min(x + width, start + height);
+            const y2 = y + Math.min(height, x + width - start);
+            if (x2 > x1 && y2 > y1) {
+                lines.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="usage-hatch" />`);
+            }
+        }
+        return lines.join('');
+    }
+
+    function getNutUsageSchematicSvg() {
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 430">
+            <rect width="920" height="430" fill="#fff"/>
+            <style>
+                .outline { stroke: #111; stroke-width: 5.2; fill: none; stroke-linecap: square; stroke-linejoin: miter; }
+                .thin { stroke: #111; stroke-width: 3; fill: none; stroke-linecap: square; stroke-linejoin: miter; }
+                .center { stroke: #111; stroke-width: 2.5; fill: none; stroke-dasharray: 16 10; stroke-linecap: butt; }
+                .hatch { stroke: #111; stroke-width: 3.1; fill: none; stroke-linecap: square; }
+                .label { font: 700 38px Arial, Helvetica, sans-serif; fill: #111; }
+            </style>
+            <rect x="42" y="252" width="790" height="72" class="outline"/>
+            <line x1="25" y1="288" x2="845" y2="288" class="center"/>
+
+            <path d="M 275 252 V 44 H 545 V 252" class="outline"/>
+            <line x1="363" y1="44" x2="363" y2="326" class="outline"/>
+            <line x1="457" y1="44" x2="457" y2="326" class="outline"/>
+            <line x1="363" y1="44" x2="457" y2="44" class="thin"/>
+
+            <path d="M 310 190 V 326 H 363 V 190" class="outline"/>
+            <path d="M 457 190 V 326 H 510 V 190" class="outline"/>
+            <line x1="310" y1="324" x2="363" y2="324" class="thin"/>
+            <line x1="457" y1="324" x2="510" y2="324" class="thin"/>
+
+            <line x1="292" y1="47" x2="275" y2="64" class="hatch"/>
+            <line x1="326" y1="47" x2="275" y2="98" class="hatch"/>
+            <line x1="360" y1="47" x2="275" y2="132" class="hatch"/>
+            <line x1="363" y1="78" x2="275" y2="166" class="hatch"/>
+            <line x1="363" y1="112" x2="275" y2="200" class="hatch"/>
+            <line x1="363" y1="146" x2="275" y2="234" class="hatch"/>
+            <line x1="363" y1="180" x2="292" y2="251" class="hatch"/>
+
+            <line x1="474" y1="47" x2="457" y2="64" class="hatch"/>
+            <line x1="508" y1="47" x2="457" y2="98" class="hatch"/>
+            <line x1="542" y1="47" x2="457" y2="132" class="hatch"/>
+            <line x1="545" y1="78" x2="457" y2="166" class="hatch"/>
+            <line x1="545" y1="112" x2="457" y2="200" class="hatch"/>
+            <line x1="545" y1="146" x2="457" y2="234" class="hatch"/>
+            <line x1="545" y1="180" x2="474" y2="251" class="hatch"/>
+
+            <line x1="328" y1="202" x2="310" y2="220" class="hatch"/>
+            <line x1="362" y1="202" x2="310" y2="254" class="hatch"/>
+            <line x1="363" y1="235" x2="310" y2="288" class="hatch"/>
+            <line x1="363" y1="269" x2="310" y2="322" class="hatch"/>
+            <line x1="492" y1="202" x2="457" y2="237" class="hatch"/>
+            <line x1="510" y1="218" x2="457" y2="271" class="hatch"/>
+            <line x1="510" y1="252" x2="457" y2="305" class="hatch"/>
+            <line x1="510" y1="286" x2="472" y2="324" class="hatch"/>
+
+            <path d="M 608 252 L 640 182 H 710" class="thin"/>
+            <text x="628" y="173" class="label">PCB</text>
+            <line x1="832" y1="252" x2="870" y2="252" class="thin"/>
+            <line x1="832" y1="324" x2="870" y2="324" class="thin"/>
+            <line x1="862" y1="252" x2="862" y2="324" class="thin"/>
+            <line x1="849" y1="252" x2="876" y2="252" class="thin"/>
+            <line x1="849" y1="324" x2="876" y2="324" class="thin"/>
+            <text x="694" y="104" class="label">Min. Sheet</text>
+            <text x="694" y="148" class="label">Thickness</text>
+            <path d="M 798 154 H 862 V 252" class="thin"/>
+        </svg>`;
+    }
+
+    function drawNutUsageSchematic() {
+        return `
+            <image id="nut-usage-schematic" href="assets/nut-usage-schematic.png?v=1" x="1020" y="1165" width="760" height="390" preserveAspectRatio="xMidYMid meet" pointer-events="none" />
+        `;
+    }
+
+    function drawNutFlatViews(nut, scale) {
+        const front = { cx: 455, cy: 815 };
+        const side = { x: 860, cy: 815 };
+        const rOuter = nut.outerD * scale / 2;
+        const rInner = nut.innerD * scale / 2;
+        const rThread = nut.threadD * scale / 2;
+        const threadText = `${nut.threadLabel}×${nut.threadPitch}`;
+        const sidePoint = (x, y) => ({
+            x: side.x + x * scale,
+            y: side.cy - y * scale
+        });
+        const sp = (x, y) => {
+            const point = sidePoint(x, y);
+            return `${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+        };
+        const total = nut.totalLength;
+        const mainEnd = nut.mainLength;
+        const top = nut.outerD / 2;
+        const bottom = -nut.outerD / 2;
+        const stepTop = nut.stepD / 2;
+        const stepBottom = -nut.stepD / 2;
+        const mainC = Math.min(nut.mainC, nut.outerD / 2);
+        const stepC = Math.min(nut.stepC, nut.stepD / 2);
+        const threadY = nut.innerD / 2;
+        const hatchClipBottom = -0.04;
+        const frontDimY = front.cy + rOuter + 112;
+        const mainDimY = side.cy - rOuter - 138;
+        const stepDimY = side.cy + rOuter + 132;
+        const outerDimX = side.x - 118;
+        const stepDimX = side.x + total * scale + 138;
+
+        const outline = [
+            `M ${sp(0, top - mainC)}`,
+            `Q ${sp(0, top)} ${sp(mainC, top)}`,
+            `L ${sp(mainEnd, top)}`,
+            `L ${sp(mainEnd, stepTop)}`,
+            `L ${sp(total - stepC, stepTop)}`,
+            `Q ${sp(total, stepTop)} ${sp(total, stepTop - stepC)}`,
+            `L ${sp(total, stepBottom + stepC)}`,
+            `Q ${sp(total, stepBottom)} ${sp(total - stepC, stepBottom)}`,
+            `L ${sp(mainEnd, stepBottom)}`,
+            `L ${sp(mainEnd, bottom)}`,
+            `L ${sp(mainC, bottom)}`,
+            `Q ${sp(0, bottom)} ${sp(0, bottom + mainC)}`,
+            `L ${sp(0, top - mainC)}`,
+            'Z'
+        ].join(' ');
+
+        const calloutAngle = Math.PI / 5.2;
+        const calloutPoint = {
+            x: front.cx + rThread * Math.cos(calloutAngle),
+            y: front.cy - rThread * Math.sin(calloutAngle)
+        };
+        const calloutElbow = {
+            x: front.cx + rOuter + 92,
+            y: front.cy - rOuter * 0.86
+        };
+        const calloutText = {
+            x: calloutElbow.x + 24,
+            y: calloutElbow.y - 26
+        };
+        const hatchClipPath = [
+            `M ${sp(0.08, hatchClipBottom)}`,
+            `L ${sp(0.08, top - mainC)}`,
+            `Q ${sp(0.08, top - 0.08)} ${sp(mainC, top - 0.08)}`,
+            `L ${sp(mainEnd, top - 0.08)}`,
+            `L ${sp(mainEnd, stepTop - 0.08)}`,
+            `L ${sp(total - stepC, stepTop - 0.08)}`,
+            `Q ${sp(total - 0.08, stepTop - 0.08)} ${sp(total - 0.08, stepTop - stepC)}`,
+            `L ${sp(total - 0.08, hatchClipBottom)}`,
+            'Z'
+        ].join(' ');
+
+        return `
+            <g id="nut-front-view" class="nut-front-view">
+                <circle cx="${front.cx}" cy="${front.cy}" r="${rOuter}" class="nut-outline bg-white" />
+                <circle cx="${front.cx}" cy="${front.cy}" r="${rInner}" class="nut-inner" />
+                <circle cx="${front.cx}" cy="${front.cy}" r="${rThread}" class="nut-thread" pathLength="100" stroke-dasharray="74 26" transform="rotate(-42 ${front.cx} ${front.cy})" />
+                <line x1="${front.cx - rOuter - 95}" y1="${front.cy}" x2="${front.cx + rOuter + 95}" y2="${front.cy}" class="nut-center" />
+                <line x1="${front.cx}" y1="${front.cy - rOuter - 95}" x2="${front.cx}" y2="${front.cy + rOuter + 95}" class="nut-center" />
+                ${drawNutHorizontalDimension(front.cx - rOuter, front.cx + rOuter, front.cy + rOuter, frontDimY, `Φ${formatMetric(nut.outerD)}±0.10`, { className: 'nut-dim', textClass: 'nut-text', textPosition: 'below', tick: 24 })}
+                <path d="M ${calloutPoint.x.toFixed(2)} ${calloutPoint.y.toFixed(2)} L ${calloutElbow.x.toFixed(2)} ${calloutElbow.y.toFixed(2)}" class="nut-dim" />
+                <path d="${drawNutArrowPath(calloutPoint.x, calloutPoint.y, -40)}" class="bg-black" />
+                <text x="${calloutText.x}" y="${calloutText.y}" class="nut-note">${threadText}</text>
+            </g>
+
+            <g id="nut-side-view" class="nut-side-view">
+                <defs>
+                    <clipPath id="nut-side-hatch-clip">
+                        <path d="${hatchClipPath}" />
+                    </clipPath>
+                </defs>
+                <path d="${outline}" class="nut-outline bg-white" />
+                <line x1="${side.x - 70}" y1="${side.cy}" x2="${side.x + total * scale + 80}" y2="${side.cy}" class="nut-center" />
+                <g clip-path="url(#nut-side-hatch-clip)">
+                    ${drawNutHatches(sidePoint, 0.08, mainEnd - 0.08, threadY + 0.1, top - 0.06, 0.62)}
+                    ${drawNutHatches(sidePoint, mainEnd + 0.05, total - stepC - 0.08, threadY + 0.1, stepTop - 0.08, 0.62)}
+                    ${drawNutSawtooth(sidePoint, 0.12, mainEnd - 0.12, threadY, 0.14, 0.62)}
+                    ${drawNutSawtooth(sidePoint, mainEnd + 0.08, total - stepC - 0.14, threadY, 0.14, 0.62)}
+                </g>
+                ${drawNutHorizontalDimension(side.x, side.x + mainEnd * scale, side.cy - top * scale, mainDimY, `${formatMetric(nut.mainLength)}±0.05`, { className: 'nut-dim', textClass: 'nut-text', textPosition: 'above', tick: 24 })}
+                ${drawNutHorizontalDimension(side.x + mainEnd * scale, side.x + total * scale, side.cy + stepTop * scale, stepDimY, `${formatMetric(nut.stepLength)}±0.05`, { className: 'nut-dim', textClass: 'nut-text', textPosition: 'below', tick: 24 })}
+                ${drawNutVerticalDimension(side.x, side.cy + rOuter, side.cy - rOuter, outerDimX, `Φ${formatMetric(nut.outerD)}±0.10`, { className: 'nut-dim', textClass: 'nut-text', side: 'left', tick: 24 })}
+                ${drawNutVerticalDimension(side.x + total * scale, side.cy + nut.stepD * scale / 2, side.cy - nut.stepD * scale / 2, stepDimX, `Φ${formatMetric(nut.stepD)}±0.05`, { className: 'nut-dim', textClass: 'nut-text', side: 'right', tick: 24 })}
+            </g>
+        `;
+    }
+
+    function drawNutArrowPath(x, y, angleDeg) {
+        const angle = angleDeg * Math.PI / 180;
+        const back = 22;
+        const wing = 8;
+        const bx = x + Math.cos(angle) * back;
+        const by = y + Math.sin(angle) * back;
+        const px = -Math.sin(angle) * wing;
+        const py = Math.cos(angle) * wing;
+        return `M ${x.toFixed(2)} ${y.toFixed(2)} L ${(bx + px).toFixed(2)} ${(by + py).toFixed(2)} L ${(bx - px).toFixed(2)} ${(by - py).toFixed(2)} Z`;
+    }
+
+    function drawNutHorizontalDimension(x1, x2, yBase, yDim, label, options = {}) {
+        const className = options.className || 'line-dim';
+        const textClass = options.textClass || 'dim-text';
+        const tick = options.tick || 18;
+        const textPosition = options.textPosition || (yDim < yBase ? 'above' : 'below');
+        const textY = textPosition === 'above' ? yDim - 32 : yDim + 36;
+        return `
+            <line x1="${x1}" y1="${yBase}" x2="${x1}" y2="${yDim}" class="${className}" />
+            <line x1="${x2}" y1="${yBase}" x2="${x2}" y2="${yDim}" class="${className}" />
+            <line x1="${x1}" y1="${yDim}" x2="${x2}" y2="${yDim}" class="${className}" />
+            <line x1="${x1}" y1="${yDim - tick}" x2="${x1}" y2="${yDim + tick}" class="${className}" />
+            <line x1="${x2}" y1="${yDim - tick}" x2="${x2}" y2="${yDim + tick}" class="${className}" />
+            <text x="${(x1 + x2) / 2}" y="${textY}" class="${textClass}">${label}</text>
+        `;
+    }
+
+    function drawNutVerticalDimension(xBase, y1, y2, xDim, label, options = {}) {
+        const className = options.className || 'line-dim';
+        const textClass = options.textClass || 'dim-text';
+        const tick = options.tick || 18;
+        const side = options.side || (xDim < xBase ? 'left' : 'right');
+        const textX = side === 'left' ? xDim - 34 : xDim + 34;
+        return `
+            <line x1="${xBase}" y1="${y1}" x2="${xDim}" y2="${y1}" class="${className}" />
+            <line x1="${xBase}" y1="${y2}" x2="${xDim}" y2="${y2}" class="${className}" />
+            <line x1="${xDim}" y1="${y1}" x2="${xDim}" y2="${y2}" class="${className}" />
+            <line x1="${xDim - tick}" y1="${y1}" x2="${xDim + tick}" y2="${y1}" class="${className}" />
+            <line x1="${xDim - tick}" y1="${y2}" x2="${xDim + tick}" y2="${y2}" class="${className}" />
+            <text x="${textX}" y="${(y1 + y2) / 2}" class="${textClass}" transform="rotate(-90 ${textX} ${(y1 + y2) / 2})">${label}</text>
+        `;
+    }
+
+    function drawNutHatches(point, xStart, xEnd, yBottom, yTop, spacing) {
+        if (xEnd <= xStart || yTop <= yBottom) return '';
+        const height = yTop - yBottom;
+        const segments = [];
+        for (let x = xStart - height; x < xEnd; x += spacing) {
+            const x1 = Math.max(xStart, x);
+            const x2 = Math.min(xEnd, x + height);
+            if (x2 <= x1) continue;
+            const y1 = yBottom + (x1 - x);
+            const y2 = yBottom + (x2 - x);
+            if (y1 > yTop || y2 < yBottom) continue;
+            const a = point(x1, Math.min(y1, yTop));
+            const b = point(x2, Math.min(y2, yTop));
+            segments.push(`<line x1="${a.x.toFixed(2)}" y1="${a.y.toFixed(2)}" x2="${b.x.toFixed(2)}" y2="${b.y.toFixed(2)}" class="nut-hatch" />`);
+        }
+        return segments.join('');
+    }
+
+    function drawNutSawtooth(point, xStart, xEnd, y, toothHeight = 0.12, toothWidth = 0.62) {
+        if (xEnd <= xStart) return '';
+        const count = Math.max(1, Math.floor((xEnd - xStart) / toothWidth));
+        const adjusted = (xEnd - xStart) / count;
+        const segments = [];
+        for (let i = 0; i < count; i++) {
+            const x = xStart + i * adjusted;
+            const mid = x + adjusted / 2;
+            const next = x + adjusted;
+            const a = point(x, y);
+            const b = point(mid, y - toothHeight);
+            const c = point(next, y);
+            const d = point(Math.min(x + Math.abs(y) * 0.2, next), 0);
+            const e = point(Math.min(mid + Math.abs(y - toothHeight) * 0.2, next), 0);
+            segments.push(`<path d="M ${a.x.toFixed(2)} ${a.y.toFixed(2)} L ${b.x.toFixed(2)} ${b.y.toFixed(2)} L ${c.x.toFixed(2)} ${c.y.toFixed(2)}" class="nut-thread" />`);
+            if (i % 2 === 0) {
+                segments.push(`<line x1="${a.x.toFixed(2)}" y1="${a.y.toFixed(2)}" x2="${d.x.toFixed(2)}" y2="${d.y.toFixed(2)}" class="nut-hatch" />`);
+            } else {
+                segments.push(`<line x1="${b.x.toFixed(2)}" y1="${b.y.toFixed(2)}" x2="${e.x.toFixed(2)}" y2="${e.y.toFixed(2)}" class="nut-hatch" />`);
+            }
+        }
+        return segments.join('');
     }
 
     function generateGrid(w, h, m) {
@@ -603,7 +1136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
-    function drawTitleBlock(m, vbW, vbH, L, W, T, mat, plat, partNo, design, date, scale) {
+    function drawTitleBlock(m, vbW, vbH, L, W, T, mat, plat, partNo, design, date, scale, itemNameOverride = null, scaleLabelOverride = undefined) {
         const tbW = 2770;
         const tbH = 320;
         const tbX = m;
@@ -613,8 +1146,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // SVG viewBox 宽 2970 对应 A4 297mm，故 1 SVG单位 = 0.1mm，实际scale px/mm
         // 我们直接计算一个合适的显示比例
         const nominalScale = Math.round((scale * 0.1) * 10) / 10; // SVG单位到mm
-        const scaleLabel = nominalScale >= 1 ? `${Math.round(nominalScale)}:1` : `1:${Math.round(1/nominalScale)}`;
-        const itemName = `${formatDimensionLabel(L)}*${formatDimensionLabel(W)}*${formatDimensionLabel(T)} ${mat}${plat} 贴片铜条`;
+        const computedScaleLabel = nominalScale >= 1 ? `${Math.round(nominalScale)}:1` : `1:${Math.round(1/nominalScale)}`;
+        const scaleLabel = scaleLabelOverride === undefined ? computedScaleLabel : scaleLabelOverride;
+        const itemName = itemNameOverride || `${formatDimensionLabel(L)}*${formatDimensionLabel(W)}*${formatDimensionLabel(T)} ${mat}${plat} 贴片铜条`;
+        const itemNameFontSize = itemNameOverride ? 30 : 36;
 
         const x0 = tbX;
         const x1 = tbX + 230;
@@ -658,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <text x="${x1 + 12}" y="${rowTextY(1, 52)}" class="title-text" style="font-size: 40px;">东莞市博众新能源材料技术有限公司</text>
                 <text x="${x1 + 12}" y="${rowTextY(1, 84)}" class="note-text" style="font-size: 22px;">Dongguan Bozhong New Energy Material Technology Co., Ltd</text>
 
-                <text x="${x1 + 55}" y="${rowTextY(2, 65)}" class="title-text" style="font-size: 36px;">${itemName}</text>
+                <text x="${x1 + 55}" y="${rowTextY(2, 65)}" class="title-text" style="font-size: ${itemNameFontSize}px;">${itemName}</text>
 
                 <text x="${x2 + 12}" y="${rowTextY(0)}" class="note-text" style="font-size: 28px;">页码(SHEET)</text>
                 <text x="${(x3 + x4) / 2}" y="${rowTextY(0, 66)}" class="title-text" style="font-size: 40px;" text-anchor="middle">1/1</text>
@@ -861,6 +1396,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function exportModel(format) {
         const values = getExportValues();
+        if (values.productType === 'nut') {
+            throw new Error('贴片螺母 3D/STL/STEP 后续增加，当前只支持导出 PDF 图纸。');
+        }
         const params = new URLSearchParams({
             format,
             l: values.L.toFixed(4),
@@ -902,12 +1440,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('btn-update').addEventListener('click', scheduleDraw);
-    document.getElementById('input-angle').addEventListener('change', scheduleDraw);
+    document.getElementById('input-product-type').addEventListener('change', () => {
+        switchProductType();
+        scheduleDraw();
+    });
     document.getElementById('input-partno-auto').addEventListener('change', () => {
+        if (!isNutMode()) {
+            busbarPartNumberAuto = document.getElementById('input-partno-auto').checked;
+        }
         syncPartNumberField();
         scheduleDraw();
     });
-    ['input-l', 'input-w', 'input-t', 'input-c', 'input-mat', 'input-plat', 'input-pack'].forEach(id => {
+    [
+        'input-angle',
+        'input-l',
+        'input-w',
+        'input-t',
+        'input-c',
+        'input-nut-thread',
+        'input-nut-outer-d',
+        'input-nut-inner-d',
+        'input-nut-main-length',
+        'input-nut-step-length',
+        'input-nut-step-d',
+        'input-nut-main-c',
+        'input-nut-step-c',
+        'input-mat',
+        'input-plat',
+        'input-pack'
+    ].forEach(id => {
         document.getElementById(id).addEventListener('change', scheduleDraw);
     });
     
@@ -921,6 +1482,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('input-partno').addEventListener('input', () => {
+        productPartNumbers[getProductType()] = document.getElementById('input-partno').value;
         if (!isPartNumberAuto()) {
             scheduleDraw();
         }
@@ -929,7 +1491,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-export').addEventListener('click', () => {
         const btn = document.getElementById('btn-export');
         runExport(btn, '正在生成 PDF...', async () => {
-            const partNo = syncPartNumberField() || 'Drawing';
+            const values = getExportValues();
+            const partNo = values.partNo || (values.productType === 'nut' ? buildNutFilenameStem() : 'Drawing');
             return exportCurrentSvgToPdf(`${partNo}.pdf`);
         });
     });
@@ -942,5 +1505,6 @@ document.addEventListener('DOMContentLoaded', () => {
         runExport(document.getElementById('btn-export-step'), '正在输出 STEP...', () => exportModel('step'));
     });
 
+    switchProductType();
     drawPromise = draw();
 });

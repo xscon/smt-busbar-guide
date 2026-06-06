@@ -81,6 +81,20 @@ body {
     gap: 0.4rem;
 }
 
+.product-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.product-panel.is-hidden {
+    display: none;
+}
+
+[hidden] {
+    display: none !important;
+}
+
 .input-group label {
     font-size: 0.85rem;
     font-weight: 500;

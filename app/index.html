@@ -24,6 +24,15 @@
 
             <div class="form-scroll">
             <div class="input-group">
+                <label>产品类型</label>
+                <select id="input-product-type">
+                    <option value="busbar" selected>贴片铜条</option>
+                    <option value="nut">贴片螺母</option>
+                </select>
+            </div>
+
+            <div class="product-panel" data-product-panel="busbar">
+            <div class="input-group">
                 <label>长 (L) mm</label>
                 <input type="number" id="input-l" value="16.00" step="0.1">
             </div>
@@ -51,6 +60,59 @@
                     <option value="e_bottom_fillet_alt">E_bottomFillet_alt</option>
                     <option value="b_bottom_fillet_alt">B_bottomFillet_alt</option>
                 </select>
+            </div>
+            </div>
+
+            <div class="product-panel is-hidden" data-product-panel="nut" hidden aria-hidden="true">
+            <div class="input-group">
+                <label>螺纹规格</label>
+                <select id="input-nut-thread">
+                    <option value="1">M1</option>
+                    <option value="1.2">M1.2</option>
+                    <option value="1.4">M1.4</option>
+                    <option value="1.6">M1.6</option>
+                    <option value="2">M2</option>
+                    <option value="2.5" selected>M2.5</option>
+                    <option value="3">M3</option>
+                    <option value="3.5">M3.5</option>
+                    <option value="4">M4</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>外径 (D) mm</label>
+                <input type="number" id="input-nut-outer-d" value="5.56" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>内孔 (d) mm</label>
+                <input type="number" id="input-nut-inner-d" value="2.05" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>主体长度 mm</label>
+                <input type="number" id="input-nut-main-length" value="7.00" step="0.1">
+            </div>
+
+            <div class="input-group">
+                <label>台阶长度 mm</label>
+                <input type="number" id="input-nut-step-length" value="1.53" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>台阶直径 mm</label>
+                <input type="number" id="input-nut-step-d" value="4.09" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>主体倒角 mm</label>
+                <input type="number" id="input-nut-main-c" value="0.20" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>台阶倒角 mm</label>
+                <input type="number" id="input-nut-step-c" value="0.40" step="0.01">
+            </div>
             </div>
 
             <div class="input-group">
@@ -134,6 +196,6 @@
         </main>
     </div>
 
-    <script src="app.js?v=21"></script>
+    <script src="app.js?v=33"></script>
 </body>
 </html>
