@@ -87,15 +87,25 @@ def _float_param(params, name, fallback):
 
 def generate_reference_nut_svg(query):
     params = parse_qs(query)
+    outer_diameter = max(_float_param(params, "outerD", 5.56), 0.1)
+    inner_diameter = max(_float_param(params, "innerD", 2.05), 0.1)
+    thread_diameter = max(_float_param(params, "thread", 2.5), 0.1)
+    main_length = max(_float_param(params, "mainLength", 7), 0.1)
+    step_length = max(_float_param(params, "stepLength", 1.53), 0.1)
+    step_diameter = max(_float_param(params, "stepD", 4.09), 0.1)
+    main_chamfer = max(_float_param(params, "mainC", 0.2), 0)
+    step_chamfer = max(_float_param(params, "stepC", 0.4), 0)
+    main_chamfer = max(0, min(main_chamfer, outer_diameter / 2 - 0.001, main_length - 0.001))
+    step_chamfer = max(0, min(step_chamfer, step_diameter / 2 - 0.001, step_length - 0.001))
     reference_params = {
-        "outer_diameter": max(_float_param(params, "outerD", 5.56), 0.1),
-        "inner_diameter": max(_float_param(params, "innerD", 2.05), 0.1),
-        "three_quarter_diameter": max(_float_param(params, "thread", 2.5), 0.1),
-        "main_length": max(_float_param(params, "mainLength", 7), 0.1),
-        "step_length": max(_float_param(params, "stepLength", 1.53), 0.1),
-        "step_diameter": max(_float_param(params, "stepD", 4.09), 0.1),
-        "main_chamfer_size": max(_float_param(params, "mainC", 0.2), 0),
-        "step_chamfer_size": max(_float_param(params, "stepC", 0.4), 0),
+        "outer_diameter": outer_diameter,
+        "inner_diameter": inner_diameter,
+        "three_quarter_diameter": thread_diameter,
+        "main_length": main_length,
+        "step_length": step_length,
+        "step_diameter": step_diameter,
+        "main_chamfer_size": main_chamfer,
+        "step_chamfer_size": step_chamfer,
     }
 
     with _NUT_REFERENCE_LOCK:

@@ -477,8 +477,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const mainLength = readNumber('input-nut-main-length', 7);
         const stepLength = readNumber('input-nut-step-length', 1.53);
         const stepD = Math.min(readNumber('input-nut-step-d', 4.09), outerD);
-        const mainC = Math.min(readNumber('input-nut-main-c', 0.2), outerD / 2 - 0.001);
-        const stepC = Math.min(readNumber('input-nut-step-c', 0.4), stepD / 2 - 0.001);
+        const mainC = Math.max(0, Math.min(readNumber('input-nut-main-c', 0.2), outerD / 2 - 0.001, mainLength - 0.001));
+        const stepC = Math.max(0, Math.min(readNumber('input-nut-step-c', 0.4), stepD / 2 - 0.001, stepLength - 0.001));
         return {
             threadSize,
             threadLabel: getThreadLabel(threadSize),

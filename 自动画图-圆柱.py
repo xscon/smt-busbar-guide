@@ -178,8 +178,14 @@ def create_side_view(ax, params):
     step_diameter = params['step_diameter']
     inner_diameter = params['inner_diameter']
     thread_radius = inner_diameter/2
-    main_chamfer = params['main_chamfer_size']  # 主体倒角
-    step_chamfer = params['step_chamfer_size']  # 台阶倒角
+    main_chamfer = min(params['main_chamfer_size'], outer_diameter/2 - 1e-4, params['main_length'] - 1e-4)  # 主体倒角
+    step_chamfer = min(params['step_chamfer_size'], step_diameter/2 - 1e-4, step_length - 1e-4)  # 台阶倒角
+    main_chamfer = max(main_chamfer, 0)
+    step_chamfer = max(step_chamfer, 0)
+    draw_step_chamfer = _display_step_chamfer(step_chamfer, step_length, step_diameter)
+    step_chamfer_x = total_length - draw_step_chamfer
+    step_top = step_diameter / 2
+    step_bottom = -step_diameter / 2
 
     # 修改倒角绘制部分，统一线条宽度
     # 左边主体倒角（圆弧）
@@ -199,23 +205,6 @@ def create_side_view(ax, params):
                                 linewidth=1.0)  # 添加linewidth参数
     ax.add_patch(arc_lower_left)
 
-    # 右边台阶倒角（圆弧）
-    # 上倒角
-    arc_upper_right = patches.Arc((total_length - step_chamfer, step_diameter/2 - step_chamfer),
-                                 step_chamfer*2, step_chamfer*2,
-                                 theta1=0, theta2=90,
-                                 color='black',
-                                 linewidth=1.0)  # 添加linewidth参数
-    ax.add_patch(arc_upper_right)
-
-    # 下倒角
-    arc_lower_right = patches.Arc((total_length - step_chamfer, -step_diameter/2 + step_chamfer),
-                                 step_chamfer*2, step_chamfer*2,
-                                 theta1=270, theta2=360,
-                                 color='black',
-                                 linewidth=1.0)  # 添加linewidth参数
-    ax.add_patch(arc_lower_right)
-
     # 修改连接线的线宽，确保统一
     line_width = 1.0  # 定义统一的线宽
 
@@ -233,32 +222,6 @@ def create_side_view(ax, params):
     ax.plot([main_chamfer, total_length-step_length],
             [-outer_diameter/2, -outer_diameter/2],
             '-', color='black', linewidth=line_width)
-
-    # 台阶部分竖线
-    ax.plot([total_length-step_length, total_length-step_length],
-            [-step_diameter/2, -outer_diameter/2],
-            '-', color='black')  # 下半部分
-    ax.plot([total_length-step_length, total_length-step_length],
-            [step_diameter/2, outer_diameter/2],
-            '-', color='black')  # 上半部分
-
-    # 台阶横线
-    ax.plot([total_length-step_length, total_length-step_chamfer],
-            [step_diameter/2, step_diameter/2],
-            '-', color='black')
-    ax.plot([total_length-step_length, total_length-step_chamfer],
-            [-step_diameter/2, -step_diameter/2],
-            '-', color='black')
-
-    # 添加台阶倒角处的垂直线段
-    ax.plot([total_length-step_chamfer, total_length-step_chamfer],
-            [-step_diameter/2, step_diameter/2],
-            '-', color='black')
-
-    # 右边最终竖线
-    ax.plot([total_length, total_length],
-            [-step_diameter/2 + step_chamfer, step_diameter/2 - step_chamfer],
-            '-', color='black')
 
     # 添加上半部分斜线填充
     def add_hatches(x_start, x_end, y_bottom, y_top, spacing=0.4):
@@ -288,9 +251,9 @@ def create_side_view(ax, params):
                thread_radius, outer_diameter/2,
                spacing=0.4)
 
-    # 为台阶上半部分添加斜填充（修改结束位置到倒角处）
-    add_hatches(total_length-step_length, total_length-step_chamfer,  # 修改这里，结束位置改为倒角处
-               thread_radius, step_diameter/2,
+    # 为台阶上半部分添加斜填充
+    add_hatches(total_length-step_length, step_chamfer_x,
+               thread_radius, step_top,
                spacing=0.4)
 
     # 在斜线区域底部绘制锯齿线
@@ -298,8 +261,8 @@ def create_side_view(ax, params):
                       y=thread_radius,  # 添加y参数
                       tooth_height=0.15,
                       tooth_width=0.4)
-    # 在台阶部分底部绘制锯齿线（修改结束位置到倒角）
-    draw_sawtooth_line(ax, total_length-step_length, total_length-step_chamfer,
+    # 在台阶部分底部绘制锯齿线
+    draw_sawtooth_line(ax, total_length-step_length, step_chamfer_x,
                       y=thread_radius,  # 添加y参数
                       tooth_height=0.15,
                       tooth_width=0.4)
@@ -320,6 +283,44 @@ def create_side_view(ax, params):
     ax.plot([total_length, total_length + params['margin']], [0, 0],
             '--', color='black', linewidth=0.5)
 
+    _redraw_step_outline(ax, total_length, step_length, outer_diameter, step_diameter, draw_step_chamfer)
+
+def _display_step_chamfer(step_chamfer, step_length, step_diameter):
+    """收短右端倒角的显示长度，避免小头斜切视觉过重。"""
+    if step_chamfer <= 1e-4:
+        return 0
+    return min(step_chamfer * 0.45, step_length * 0.16, step_diameter * 0.055)
+
+def _redraw_step_outline(ax, total_length, step_length, outer_diameter, step_diameter, step_chamfer):
+    """重描台阶外轮廓，避免台阶线被剖面线/螺纹线压住。"""
+    shoulder_x = total_length - step_length
+    chamfer_x = total_length - step_chamfer
+    outer_radius = outer_diameter / 2
+    step_radius = step_diameter / 2
+    step_bottom = -step_radius
+    line_width = 1.0
+
+    ax.plot([shoulder_x, shoulder_x], [step_radius, outer_radius],
+            '-', color='black', linewidth=line_width, zorder=8)
+    ax.plot([shoulder_x, shoulder_x], [-outer_radius, -step_radius],
+            '-', color='black', linewidth=line_width, zorder=8)
+    ax.plot([shoulder_x, chamfer_x], [step_radius, step_radius],
+            '-', color='black', linewidth=line_width, zorder=8)
+    ax.plot([shoulder_x, chamfer_x], [step_bottom, step_bottom],
+            '-', color='black', linewidth=line_width, zorder=8)
+    if step_chamfer > 1e-4:
+        ax.plot([chamfer_x, total_length], [step_radius, step_radius - step_chamfer],
+                '-', color='black', linewidth=line_width, zorder=8)
+        ax.plot([chamfer_x, total_length], [step_bottom, step_bottom + step_chamfer],
+                '-', color='black', linewidth=line_width, zorder=8)
+        ax.plot([total_length, total_length],
+                [step_bottom + step_chamfer, step_radius - step_chamfer],
+                '-', color='black', linewidth=line_width, zorder=8)
+    else:
+        ax.plot([total_length, total_length],
+                [step_bottom, step_radius],
+                '-', color='black', linewidth=line_width, zorder=8)
+
 def draw_sawtooth_line(ax, x_start, x_end, y, tooth_height=0.15, tooth_width=0.4):
     """绘制锯齿线和斜线填充
     x_start: 起始x坐标
@@ -330,7 +331,9 @@ def draw_sawtooth_line(ax, x_start, x_end, y, tooth_height=0.15, tooth_width=0.4
     """
     # 计算要的完整锯齿数量
     length = x_end - x_start
-    num_teeth = int(length / tooth_width)
+    if length <= 0:
+        return
+    num_teeth = max(1, int(length / tooth_width))
     # 调整锯齿宽度以确保均匀分布
     adjusted_width = length / num_teeth
 
